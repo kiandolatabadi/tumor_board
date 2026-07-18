@@ -27,7 +27,7 @@ def test_case_detail_exposes_folders_and_transcript():
     d = get_case(HERO)
     assert d is not None
     assert [f.name for f in d.folders]
-    assert d.transcript and "#" in d.transcript
+    assert d.transcript and "ONCOLOGIST" in d.transcript  # a real board transcript with turns
     assert d.document_count == sum(len(f.documents) for f in d.folders)
 
 
