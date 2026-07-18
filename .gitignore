@@ -93,7 +93,12 @@ output/
 CLAUDE.md
 .claude/
 
-# ---- Third-party dataset (kept local; public repo, ~6.5M, redistribution) ----
-# Remove this line if teammates should clone the dataset from the repo.
-data/abridge/
+# ---- Third-party dataset (Abridge, synthetic; committed so teammates can run
+# against real records — the performedPeriod class of bug only shows up there).
+# Fully synthetic per its README: Synthea patients, LLM-generated transcripts,
+# no real patient data. Provided by Abridge for hackathon use; no LICENSE ships
+# with it, so keep it to the data files only.
+# index.html is a 2M standalone browser viewer — redundant in a repo.
+data/abridge/synthetic-ambient-fhir-25/index.html
+data/abridge/**/*.zip
 .boilerplate/
