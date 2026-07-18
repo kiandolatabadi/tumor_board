@@ -79,6 +79,9 @@ class AnalysisResult(BaseModel):
     # when it authorized a skip, `goc.disclosure` is the reason, and a skip is never
     # silent. See goc.evaluate_goc.
     goc: Optional[GocEvaluation] = None
+    # True when the model's output was cut off and only complete findings were
+    # recovered. Surfaced so a partial run never reads as a complete one.
+    truncated: bool = False
 
 
 class AnalyzeRequest(BaseModel):

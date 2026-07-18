@@ -10,10 +10,12 @@ from __future__ import annotations
 import json
 import re
 
+from pydantic import ValidationError
+
 from . import tools
 from .agents.schema import Enrichment
 from .case_schema import TumorBoardCase
-from .config import MAX_TOOL_TURNS, MODEL, get_client
+from .config import MAX_OUTPUT_TOKENS, MAX_TOOL_TURNS, MODEL, get_client
 from .goc import GocEvaluation, evaluate_goc
 from .schema import ActionItem, AnalysisResult, Finding, OperabilityStatus
 
@@ -142,6 +144,31 @@ def goc_skip_result(goc: GocEvaluation, enrichment: Enrichment | None) -> Analys
     )
 
 
+
+def _unparseable_result(detail: str, stop_reason: str | None) -> AnalysisResult:
+    """Degraded result for output we could not read at all. Reports the failure as
+    a finding so the run is visibly incomplete rather than visibly empty."""
+    return AnalysisResult(
+        findings=[
+            Finding(
+                issue="Analysis did not complete — the model's output could not be read.",
+                evidence_ref=f"orchestrator/parse_error (stop_reason={stop_reason})",
+                recommendation=(
+                    "Re-run the analysis. No findings were produced, which is NOT the same as "
+                    f"finding no gaps. Parser detail: {detail[:200]}"
+                ),
+                match_confidence=1.0,
+                patient_facing_note="Not applicable — this is a system message, not a clinical finding.",
+                live_question="Re-run the analysis before relying on this case's findings.",
+                source_agent="orchestrator",
+                proposes_procedure=False,
+            )
+        ],
+        action_ledger=[],
+        truncated=True,
+    )
+
+
 def _operability_input(case: TumorBoardCase, obs) -> dict:
     """Derive check_operability inputs from the case, folding in the inferred fact
     that raised the check so an *uncoded* comorbidity actually influences the result."""
@@ -221,7 +248,7 @@ def analyze(
     for _ in range(MAX_TOOL_TURNS):
         resp = client.messages.create(
             model=MODEL,
-            max_tokens=4096,
+            max_tokens=MAX_OUTPUT_TOKENS,
             system=SYSTEM,
             tools=tools.TOOL_DEFS,
             messages=messages,
@@ -229,7 +256,14 @@ def analyze(
         messages.append({"role": "assistant", "content": resp.content})
 
         if resp.stop_reason != "tool_use":
-            result = _parse(resp)
+            try:
+                result = _parse(resp)
+            except OutputUnparseable as e:
+                # Loud, not silent: an empty findings panel is indistinguishable
+                # from "this case had no gaps", which is the worst failure here.
+                result = _unparseable_result(str(e), resp.stop_reason)
+            if resp.stop_reason == "max_tokens":
+                result.truncated = True
             result.findings = gate_operability(result.findings, op_results)
             result.enrichment = enrichment or Enrichment()
             result.triggered_checks = triggered
@@ -261,10 +295,62 @@ def analyze(
     raise RuntimeError(f"Orchestrator exceeded {MAX_TOOL_TURNS} tool turns without finishing.")
 
 
+class OutputUnparseable(Exception):
+    """The model's final message could not be read as the agreed JSON."""
+
+
+def _salvage_findings(text: str) -> list[dict]:
+    """Best-effort recovery from truncated output. Scans the findings array and
+    keeps every COMPLETE object, so a run cut off mid-array yields 6 findings
+    instead of none. Partial trailing objects are discarded, never guessed at."""
+    start = text.find('"findings"')
+    if start < 0:
+        return []
+    i = text.find("[", start)
+    if i < 0:
+        return []
+    out, depth, obj_start, in_str, esc = [], 0, None, False, False
+    for j in range(i + 1, len(text)):
+        c = text[j]
+        if in_str:
+            in_str = not (c == '"' and not esc)
+            esc = c == "\\" and not esc
+            continue
+        if c == '"':
+            in_str, esc = True, False
+        elif c == "{":
+            if depth == 0:
+                obj_start = j
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0 and obj_start is not None:
+                try:
+                    out.append(json.loads(text[obj_start:j + 1]))
+                except json.JSONDecodeError:
+                    pass
+                obj_start = None
+        elif c == "]" and depth == 0:
+            break
+    return out
+
+
 def _parse(resp) -> AnalysisResult:
     text = "".join(b.text for b in resp.content if b.type == "text").strip()
     # Tolerate ```json fences.
     if text.startswith("```"):
         text = text.split("```", 2)[1].removeprefix("json").strip()
-    data = json.loads(text)
-    return AnalysisResult(**data)  # gating applied by analyze() with operability results
+    try:
+        return AnalysisResult(**json.loads(text))  # gating applied by analyze()
+    except (json.JSONDecodeError, TypeError, ValueError) as e:
+        # Truncated or malformed. Recover whole findings rather than losing the run:
+        # a blank panel is indistinguishable from "nothing was wrong with this case".
+        salvaged = []
+        for f in _salvage_findings(text):
+            try:
+                salvaged.append(Finding(**f))
+            except ValidationError:
+                continue
+        if not salvaged:
+            raise OutputUnparseable(str(e)) from e
+        return AnalysisResult(findings=salvaged, action_ledger=[], truncated=True)
