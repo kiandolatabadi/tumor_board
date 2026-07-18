@@ -85,3 +85,7 @@ coverage/
 *.log
 logs/
 tmp/
+
+# ---- Claude ----
+CLAUDE.md
+.claude/
