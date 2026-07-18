@@ -86,6 +86,14 @@ coverage/
 logs/
 tmp/
 
+# ---- Generated run output ----
+output/
+
 # ---- Claude ----
 CLAUDE.md
 .claude/
+
+# ---- Third-party dataset (kept local; public repo, ~6.5M, redistribution) ----
+# Remove this line if teammates should clone the dataset from the repo.
+data/abridge/
+.boilerplate/
