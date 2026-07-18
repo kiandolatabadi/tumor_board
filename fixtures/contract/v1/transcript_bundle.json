@@ -1,0 +1,71 @@
+{
+  "bundle_version": "1.0.0",
+  "source_digest": "sha256:e2b29b6339af45936e1423c858fd6206019b4c4c7b9c4e99eaa0e69f971290e4",
+  "transcript_id": "tb-case-nsclc-egfr-001",
+  "turns": [
+    {
+      "line_id": "L001",
+      "ordinal": 1,
+      "speaker": "ONCOLOGIST",
+      "speaker_role": "oncologist",
+      "text": "Let's discuss Jordan Rivera, 69, newly diagnosed stage IIIA NSCLC adenocarcinoma, T3 N1 M0.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L002",
+      "ordinal": 2,
+      "speaker": "PATHOLOGIST",
+      "speaker_role": "pathologist",
+      "text": "Adenocarcinoma confirmed. Molecular panel back: PD-L1 is 70 percent, ALK negative.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L003",
+      "ordinal": 3,
+      "speaker": "ONCOLOGIST",
+      "speaker_role": "oncologist",
+      "text": "Given the high PD-L1 I'd lean toward concurrent chemoradiation followed by immunotherapy consolidation.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L004",
+      "ordinal": 4,
+      "speaker": "RADIOLOGIST",
+      "speaker_role": "radiologist",
+      "text": "Imaging supports N1 nodal involvement, no distant disease. Suitable for radiation planning.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L005",
+      "ordinal": 5,
+      "speaker": "SURGEON",
+      "speaker_role": "surgeon",
+      "text": "This is potentially resectable. I'd put a lobectomy on the table as the definitive option.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L006",
+      "ordinal": 6,
+      "speaker": "ONCOLOGIST",
+      "speaker_role": "oncologist",
+      "text": "Okay, let's go with the radiotherapy-based approach over surgery. Radiation oncology to plan this week.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L007",
+      "ordinal": 7,
+      "speaker": "NURSE_COORDINATOR",
+      "speaker_role": "nurse_coordinator",
+      "text": "I'll schedule the radiation planning CT and set up the immunotherapy consult.",
+      "timestamp": null
+    },
+    {
+      "line_id": "L008",
+      "ordinal": 8,
+      "speaker": "ONCOLOGIST",
+      "speaker_role": "oncologist",
+      "text": "Good. I think that's our plan. Anything else? No? Let's move to the next case.",
+      "timestamp": null
+    }
+  ]
+}

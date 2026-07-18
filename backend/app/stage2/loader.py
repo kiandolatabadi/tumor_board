@@ -33,6 +33,7 @@ from typing import Optional
 
 from .adapter import to_bundle
 from .bundle import PatientCaseBundle
+from .transcript import TranscriptBundle, to_transcript_bundle
 
 # stage2 -> app -> backend -> repo root
 _REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -170,30 +171,53 @@ class _Assembler:
         return ids
 
 
-def load_patient_folder(folder: Path | str) -> PatientCaseBundle:
-    """Assemble one folder's files into one PatientCaseBundle, in isolation.
-
-    Raises MixedPatientDataError if the folder's files reference more than one
-    patient. The returned bundle's case_id IS the folder name (the partition key).
-    """
+def _assemble_isolated(folder: Path | str) -> tuple[Path, dict, list[str]]:
+    """Assemble ONE folder's files into one record, enforcing single-patient
+    identity. Shared by every per-folder loader so the isolation guard runs once
+    and identically for the case bundle and the transcript bundle."""
     folder = Path(folder)
     if not folder.is_dir():
         raise FileNotFoundError(f"not a patient folder: {folder}")
-
     asm = _Assembler(folder)
     record = asm.assemble()
-
     ids = asm.identities()
     if len(ids) > 1:
         raise MixedPatientDataError(
             f"folder '{folder.name}' contains data for multiple patients: {sorted(ids)}. "
             "Each folder must hold exactly one patient."
         )
+    return folder, record, asm.warnings
 
+
+def load_patient_folder(folder: Path | str) -> PatientCaseBundle:
+    """Assemble one folder's files into one PatientCaseBundle, in isolation.
+
+    Raises MixedPatientDataError if the folder's files reference more than one
+    patient. The returned bundle's case_id IS the folder name (the partition key).
+    """
+    folder, record, warnings = _assemble_isolated(folder)
     bundle = to_bundle(record)
     bundle.case_id = folder.name  # authoritative partition key — never the file's internal id
-    bundle.adapter_report.warnings.extend(asm.warnings)
+    bundle.adapter_report.warnings.extend(warnings)
     return bundle
+
+
+def load_transcript_bundle(folder: Path | str) -> TranscriptBundle:
+    """Build the TranscriptBundle for one patient folder, in isolation.
+    transcript_id is the folder name, so turns can't be cited across patients."""
+    folder, record, _ = _assemble_isolated(folder)
+    return to_transcript_bundle(record.get("transcript", ""), transcript_id=folder.name)
+
+
+def load_patient(folder: Path | str) -> tuple[PatientCaseBundle, TranscriptBundle]:
+    """Both Stage 2 artifacts for one patient folder, from a single isolated
+    assembly (the identity guard runs once). Both share the folder-name key."""
+    folder, record, warnings = _assemble_isolated(folder)
+    bundle = to_bundle(record)
+    bundle.case_id = folder.name
+    bundle.adapter_report.warnings.extend(warnings)
+    transcript = to_transcript_bundle(record.get("transcript", ""), transcript_id=folder.name)
+    return bundle, transcript
 
 
 def load_all(data_dir: Path | str = DEFAULT_DATA_DIR) -> tuple[dict[str, PatientCaseBundle], dict[str, str]]:

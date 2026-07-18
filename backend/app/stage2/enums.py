@@ -44,6 +44,16 @@ class StageGroup(str, Enum):
     unknown = "unknown"
 
 
+class SpeakerRole(str, Enum):
+    """Role of a transcript speaker (TranscriptBundle, contract §4/§6)."""
+    oncologist = "oncologist"
+    radiologist = "radiologist"
+    surgeon = "surgeon"
+    pathologist = "pathologist"
+    nurse_coordinator = "nurse_coordinator"
+    other = "other"
+
+
 # Care-domain vocabulary lives in app/care_domains.py — a dependency-free module
 # both the Stage 2 contract and the pre-split schema import, so neither layer
 # depends on the other. Re-exported here so it reads as part of this contract.
