@@ -14,7 +14,8 @@ from . import tools
 from .agents.schema import Enrichment
 from .case_schema import TumorBoardCase
 from .config import MAX_TOOL_TURNS, MODEL, get_client
-from .schema import AnalysisResult, Finding, OperabilityStatus
+from .goc import GocEvaluation, evaluate_goc
+from .schema import ActionItem, AnalysisResult, Finding, OperabilityStatus
 
 SYSTEM = """You are the orchestrator for a tumor-board gap-detection assistant.
 You surface what the room did NOT address; you never make the clinical call.
@@ -31,6 +32,11 @@ Rules:
   about "radiotherapy vs surgery" is not a procedure proposal).
 - Keep recommendation_grade (evidence strength, e.g. "IIa/B") separate from
   match_confidence (your certainty this evidence fits THIS patient, 0-1).
+- The GOALS-OF-CARE PRECONDITION has already been evaluated in code; treat it as
+  authoritative and never contradict it. If its status is not
+  "valid_escalation_consistent", any escalating option you surface must state the
+  goals-of-care status alongside it — the patient's documented wishes are context
+  for every recommendation, not a separate topic.
 - Link each finding to the transcript line/quote it relates to, or mark it an absence.
 
 When done calling tools, return ONLY a JSON object matching:
@@ -87,6 +93,41 @@ def gate_operability(
     return findings
 
 
+def goc_skip_result(goc: GocEvaluation, enrichment: Enrichment | None) -> AnalysisResult:
+    """The skip path. Guidance is skipped, but the SKIP ITSELF IS SURFACED — a
+    system that declines to recommend must say so, or the clinician cannot tell
+    the difference between 'nothing applies' and 'nothing was looked for'."""
+    return AnalysisResult(
+        findings=[
+            Finding(
+                issue="Disease-directed guidance and trial matching were not surfaced for this case.",
+                evidence_ref=f"goals_of_care@{goc.documented_date}",
+                recommendation=goc.disclosure,
+                recommendation_grade=None,  # no guidance rule matched — nothing to copy a grade from
+                match_confidence=1.0,       # a deterministic record check, not a semantic match
+                patient_facing_note=(
+                    "Care is being guided by the goals this patient already documented, which focus on "
+                    "comfort and support rather than further disease-directed treatment."
+                ),
+                live_question=(
+                    "Do the documented goals of care still reflect what this patient wants today?"
+                ),
+                source_agent="goals_of_care_precondition",
+                proposes_procedure=False,
+            )
+        ],
+        action_ledger=[
+            ActionItem(
+                action="Confirm the documented goals of care still reflect the patient's wishes.",
+                owner="NURSE_COORDINATOR",
+                linked_finding="Disease-directed guidance and trial matching were not surfaced for this case.",
+            )
+        ],
+        enrichment=enrichment or Enrichment(),
+        goc=goc,
+    )
+
+
 def _operability_input(case: TumorBoardCase, obs) -> dict:
     """Derive check_operability inputs from the case, folding in the inferred fact
     that raised the check so an *uncoded* comorbidity actually influences the result."""
@@ -126,6 +167,14 @@ def analyze(
     transcript: list[dict],
     enrichment: Enrichment | None = None,
 ) -> AnalysisResult:
+    # PRECONDITION, before anything else: does this patient want disease-directed
+    # care at all? Only a positive, recent, event-valid supportive-care record can
+    # authorize skipping guidance — absence or staleness never does. Runs after
+    # enrichment because the room may hold fresher goals of care than the chart.
+    goc = evaluate_goc(case, enrichment)
+    if goc.authorizes_skip:
+        return goc_skip_result(goc, enrichment)
+
     client = get_client()
     # The normalized case is what the model reasons over; its own completeness
     # check surfaces the structural gaps (missing stage, biomarkers, GOC...).
@@ -148,6 +197,8 @@ def analyze(
         + "\n\nTRIGGERED CHECKS (AUTHORITATIVE — these tools already ran because an "
         "inference raised them; respect their results):\n"
         + json.dumps(triggered, indent=2, default=str)
+        + "\n\nGOALS-OF-CARE PRECONDITION (AUTHORITATIVE — already evaluated in code):\n"
+        + json.dumps(goc.model_dump(), indent=2, default=str)
         + "\n\nBOARD TRANSCRIPT:\n"
         + json.dumps(transcript, indent=2)
     )
@@ -168,6 +219,14 @@ def analyze(
             result.findings = gate_operability(result.findings, op_results)
             result.enrichment = enrichment or Enrichment()
             result.triggered_checks = triggered
+            result.goc = goc
+            if goc.revisit_recommended:
+                result.action_ledger.append(
+                    ActionItem(
+                        action=f"Revisit goals of care with the patient — {goc.disclosure}",
+                        owner="NURSE_COORDINATOR",
+                    )
+                )
             return result
 
         tool_results = []

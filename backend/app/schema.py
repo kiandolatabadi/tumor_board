@@ -12,6 +12,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 from .agents.schema import Enrichment
+from .goc import GocEvaluation
 
 
 class RationaleStatus(str, Enum):
@@ -74,6 +75,10 @@ class AnalysisResult(BaseModel):
     # Tools an inference deterministically triggered (raises_check), with results —
     # these gate the findings above. See orchestrator.run_triggered_checks.
     triggered_checks: list[dict] = Field(default_factory=list)
+    # The goals-of-care precondition, evaluated BEFORE guidance. Always populated —
+    # when it authorized a skip, `goc.disclosure` is the reason, and a skip is never
+    # silent. See goc.evaluate_goc.
+    goc: Optional[GocEvaluation] = None
 
 
 class AnalyzeRequest(BaseModel):
