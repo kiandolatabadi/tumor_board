@@ -1,0 +1,53 @@
+{
+  "case_id": "hero_breast_escalation",
+  "cancer_type": "breast",
+  "patient_ref": "Sarah Mitchell, DOB 1992-03-14 (age 34)",
+  "line_of_therapy": "First distant recurrence -- escalation from curative-intent to metastatic-directed therapy",
+  "board_date": "2026-06-25",
+  "planted_gaps": [
+    {
+      "id": "gap_fertility",
+      "description": "Fertility preservation was deferred at initial diagnosis (2024-02-10) and never revisited despite reproductive age and a new gonadotoxic/systemic therapy decision.",
+      "catching_check": "check_guideline_coverage (G-BR-01)",
+      "evidence_location": [
+        "oncology/consult_2024-02-10_initial_diagnosis.md",
+        "biometrics/demographics_and_vitals.md",
+        "absence in all later oncology notes"
+      ]
+    },
+    {
+      "id": "gap_trial_logistics",
+      "description": "Trial BR-2201 ('the ribociclib trial') is mentioned as an option but is closed to enrollment and geographically distant.",
+      "catching_check": "search_trials",
+      "evidence_location": [
+        "library/trials_breast.md#BR-2201",
+        "tumor_board_transcript.md line 9-10"
+      ]
+    },
+    {
+      "id": "gap_operability",
+      "description": "Surgeon floats liver metastasectomy for two lesions; no operability/feasibility check has been run.",
+      "catching_check": "check_operability (hard architectural rule)",
+      "evidence_location": [
+        "tumor_board_transcript.md line 6-8",
+        "radiology/2026-06-18_surveillance_ct.md"
+      ]
+    },
+    {
+      "id": "gap_goals_of_care_stale",
+      "description": "Only goals-of-care note on file is from initial diagnosis (curative intent, 2024-02-10); not revisited now that disease is recurrent/metastatic.",
+      "catching_check": "check_guideline_coverage (G-BR-05) + date comparison",
+      "evidence_location": [
+        "oncology/consult_2024-02-10_initial_diagnosis.md",
+        "oncology/consult_2026-06-25_recurrence_workup.md"
+      ]
+    }
+  ],
+  "expected_findings_count": 4,
+  "noise_documents_not_expected_to_fire": [
+    "radiology/2023-08-14_incidental_thyroid_nodule.md",
+    "gynecology/2023-08-22_annual_wellwoman_exam.md",
+    "medications/medication_reconciliation_2024-03-06.md"
+  ],
+  "notes": "Design case -- 4 stacked Tier-1 gaps plus 3 deliberate noise documents that should not trigger findings."
+}

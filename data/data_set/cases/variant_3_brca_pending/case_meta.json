@@ -1,0 +1,26 @@
+{
+  "case_id": "variant_3_brca_pending",
+  "cancer_type": "breast",
+  "patient_ref": "Sarah Mitchell (fork of hero case, later timepoint)",
+  "line_of_therapy": "Considering PARP-inhibitor trial (BR-1187); germline testing pending",
+  "board_date": "2026-07-23",
+  "planted_gaps": [
+    {
+      "id": "gap_brca_pending_confidence",
+      "description": "Germline BRCA1/2 testing was sent (per hero board's suggestion) but result is still pending. Trial BR-1187 requires a resulted, positive germline BRCA mutation, not a pending test. recommendation_grade for the trial's evidence should stay high; match_confidence for this specific patient should be low.",
+      "catching_check": "search_trials + explicit two-axis separation (recommendation_grade vs match_confidence)",
+      "evidence_location": [
+        "pathology/2026-07-20_germline_brca_pending.md",
+        "library/trials_breast.md#BR-1187"
+      ]
+    }
+  ],
+  "expected_findings_count": 1,
+  "resolved_from_hero": [
+    "gap_fertility",
+    "gap_goals_of_care_stale",
+    "gap_operability",
+    "gap_trial_logistics"
+  ],
+  "notes": "Fork of hero case. This is the dedicated test of the orthogonal confidence axis -- evidence strength and patient-fit confidence should NOT collapse into one number here."
+}

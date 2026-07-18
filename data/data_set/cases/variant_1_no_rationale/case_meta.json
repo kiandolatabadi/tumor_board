@@ -1,0 +1,25 @@
+{
+  "case_id": "variant_1_no_rationale",
+  "cancer_type": "breast",
+  "patient_ref": "Sarah Mitchell (fork of hero case, later timepoint)",
+  "line_of_therapy": "Progression on first-line endocrine + CDK4/6 inhibitor -- choosing next therapy",
+  "board_date": "2026-07-09",
+  "planted_gaps": [
+    {
+      "id": "gap_no_rationale",
+      "description": "Board switches to capecitabine re-challenge over continuing/adjusting endocrine-based therapy with no stated rationale for the choice.",
+      "catching_check": "decision-rationale extraction",
+      "evidence_location": [
+        "tumor_board_transcript.md"
+      ]
+    }
+  ],
+  "expected_findings_count": 1,
+  "resolved_from_hero": [
+    "gap_fertility",
+    "gap_goals_of_care_stale",
+    "gap_operability",
+    "gap_trial_logistics"
+  ],
+  "notes": "Fork of hero case. Fertility, goals-of-care, operability, and the BR-2201 trial mention are all explicitly closed via the oncology follow-up note -- the only open finding is the undocumented rationale for today's decision."
+}

@@ -1,0 +1,10 @@
+{
+  "case_id": "variant_4_lung_control",
+  "cancer_type": "NSCLC",
+  "patient_ref": "Robert Chen, DOB 1959-02-02 (age 67)",
+  "line_of_therapy": "First-line, newly diagnosed stage IV",
+  "board_date": "2026-07-11",
+  "planted_gaps": [],
+  "expected_findings_count": 0,
+  "notes": "Deliberate negative control -- goals-of-care is current, the trial is open/local/a clean match, no surgical option is raised, PFTs are mildly reduced but not a red flag, and nothing is stale. A system that fires a finding here has a false-positive problem, not a true catch."
+}

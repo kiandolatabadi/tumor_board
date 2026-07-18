@@ -1,0 +1,27 @@
+{
+  "case_id": "variant_2_stale_interaction",
+  "cancer_type": "breast",
+  "patient_ref": "Sarah Mitchell (fork of hero case, later timepoint)",
+  "line_of_therapy": "Considering capecitabine re-challenge; incidental new anticoagulation",
+  "board_date": "2026-07-16",
+  "planted_gaps": [
+    {
+      "id": "gap_stale_interaction",
+      "description": "Patient started on warfarin for an incidental DVT; capecitabine is now being considered. INT-002 (capecitabine + warfarin) requires a current renal panel, but the most recent creatinine on file is over four months old.",
+      "catching_check": "flag_stale_data must fire before check_drug_interactions can be trusted (sequencing dependency)",
+      "evidence_location": [
+        "laboratory/2026-03-12_cbc_cmp_prior_surveillance.md",
+        "medications/current_med_list.md",
+        "library/drug_interactions.md#INT-002"
+      ]
+    }
+  ],
+  "expected_findings_count": 1,
+  "resolved_from_hero": [
+    "gap_fertility",
+    "gap_goals_of_care_stale",
+    "gap_operability",
+    "gap_trial_logistics"
+  ],
+  "notes": "Fork of hero case. The stale-renal-panel + new-warfarin combination is the only intended finding; it requires chaining two checks, not either alone."
+}

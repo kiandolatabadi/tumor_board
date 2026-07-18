@@ -1,0 +1,26 @@
+{
+  "case_id": "variant_5_cardiac_comorbidity",
+  "cancer_type": "breast",
+  "patient_ref": "Sarah Mitchell (fork of hero case, later timepoint)",
+  "line_of_therapy": "Considering anthracycline-based re-challenge after further progression",
+  "board_date": "2026-07-30",
+  "planted_gaps": [
+    {
+      "id": "gap_cardiac_comorbidity",
+      "description": "Patient has a history of autoimmune myocarditis with reduced LVEF (48%, 2019); anthracycline-based re-challenge is being considered without reassessing cardiac function per G-BR-04. This moment should also fire a live_question, not just an end-of-meeting ledger item -- it is raised then quickly moved past in the transcript.",
+      "catching_check": "check_guideline_coverage (G-BR-04) + live_question mechanism",
+      "evidence_location": [
+        "biometrics/demographics_and_vitals.md",
+        "tumor_board_transcript.md"
+      ]
+    }
+  ],
+  "expected_findings_count": 1,
+  "resolved_from_hero": [
+    "gap_fertility",
+    "gap_goals_of_care_stale",
+    "gap_operability",
+    "gap_trial_logistics"
+  ],
+  "notes": "Fork of hero case. This case specifically stress-tests the live, in-the-moment question mechanism (#7), since the comorbidity is mentioned out loud and then dropped rather than being a pure chart omission."
+}
