@@ -31,7 +31,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 from .agents.schema import Enrichment, InferenceKind
-from .case_schema import TumorBoardCase
+from .case_schema import CareDomain, ScopeSource, TumorBoardCase
 
 # ---------------------------------------------------------------------------
 # BELONGS IN THE GUIDANCE PACK (clinical opinion, not mechanical fact).
@@ -43,6 +43,13 @@ MAX_GOC_AGE_DAYS = 180
 INVALIDATING_EVENT_KINDS = {
     "surgery", "systemic", "radiation", "procedure", "progression", "diagnosis",
 }
+# Which domains a record must speak to before it can suppress disease-directed
+# guidance. A resuscitation-only conversation ("DNR") says nothing about whether
+# to pursue a trial — the README's "doesn't cover this scenario" case.
+DISEASE_DIRECTED_DOMAINS = {
+    CareDomain.systemic_therapy, CareDomain.surgery,
+    CareDomain.radiation, CareDomain.clinical_trials,
+}
 
 # Positive supportive-care intent. Deliberately narrow: this is the *authorizing*
 # direction, so it must not fire on ambiguity.
@@ -52,9 +59,13 @@ _SUPPORTIVE = re.compile(
     r"forgo(?:ing)? (?:further )?treatment|declines? further treatment)\b",
     re.I,
 )
-# A negation before the match flips the meaning ("not ready for hospice").
+# A negation before the match flips the meaning ("not ready for hospice"). The
+# window stops at clause boundaries (. ; ,) because a negation in a PRECEDING
+# clause negates that clause, not this one: in "Declines further chemotherapy;
+# comfort care only" the "declines" governs chemotherapy, and letting it reach
+# across the semicolon would cancel the supportive-care statement that follows.
 _NEGATED = re.compile(
-    r"\b(not|no longer|never|declin\w+|against|rather than|instead of|isn'?t|aren'?t)\b[^.]{0,40}$",
+    r"\b(not|no longer|never|declin\w+|against|rather than|instead of|isn'?t|aren'?t)\b[^.;,]{0,25}$",
     re.I,
 )
 
@@ -66,6 +77,7 @@ class GocStatus(str, Enum):
     INVALIDATED_BY_EVENT = "invalidated_by_event"             # recorded before a major event
     TIMELINE_INCOMPLETE = "timeline_incomplete"               # undated events — recency unprovable
     CONTRADICTED_BY_ROOM = "contradicted_by_room"             # live discussion supersedes the chart
+    SCOPE_MISMATCH = "scope_mismatch"                         # recorded, but not about this question
     ABSENT = "absent"
 
 
@@ -106,6 +118,19 @@ class GocEvaluation(BaseModel):
     undated_events: list[MajorEvent] = Field(default_factory=list)
     timeline_complete: bool = True
     data_gap_note: Optional[str] = Field(None, description="Shown to providers when the timeline is partial.")
+    # What the conversation actually covered. Stage 3 uses this to check a specific
+    # rule's domain against the record; `scope_source == absent` means unknown, not empty.
+    documented_scope: list[CareDomain] = Field(default_factory=list)
+    scope_source: ScopeSource = ScopeSource.absent
+
+
+def covers_domain(ev: GocEvaluation, domain: CareDomain) -> Optional[bool]:
+    """Does the documented conversation speak to `domain`? Returns None when the
+    source recorded no scope — unknown is not False, and callers must not treat it
+    as coverage. The deterministic primitive Stage 3 joins a rule's domain against."""
+    if ev.scope_source is ScopeSource.absent or not ev.documented_scope:
+        return None
+    return domain in ev.documented_scope
 
 
 def _parse_date(s: Optional[str]) -> Optional[date]:
@@ -224,6 +249,7 @@ def evaluate_goc(
             documented_date=goc.documented_date, age_days=age_days,
             reference_date=ref.isoformat() if ref else None,
             room_signal_quote=quote, summary=summary, revisit_recommended=True,
+            documented_scope=goc.covers, scope_source=goc.scope_source,
             undated_events=undated, timeline_complete=not undated, data_gap_note=gap_note,
             disclosure=(
                 "Goals of care are being discussed in this meeting, so the documented record is "
@@ -246,6 +272,7 @@ def evaluate_goc(
             documented_date=goc.documented_date, age_days=age_days,
             reference_date=ref.isoformat() if ref else None,
             invalidating_event=invalidating, summary=summary, revisit_recommended=True,
+            documented_scope=goc.covers, scope_source=goc.scope_source,
             undated_events=undated, timeline_complete=not undated, data_gap_note=gap_note,
             disclosure=(
                 f"Documented goals of care ({goc.documented_date}) predate a major treatment event "
@@ -262,6 +289,7 @@ def evaluate_goc(
             documented_date=goc.documented_date, age_days=age_days,
             reference_date=ref.isoformat() if ref else None,
             summary=summary, revisit_recommended=True,
+            documented_scope=goc.covers, scope_source=goc.scope_source,
             undated_events=undated, timeline_complete=not undated, data_gap_note=gap_note,
             disclosure=(
                 f"Documented goals of care are undated or older than {max_age_days} days"
@@ -281,6 +309,7 @@ def evaluate_goc(
             documented_date=goc.documented_date, age_days=age_days,
             reference_date=ref.isoformat() if ref else None,
             summary=summary, revisit_recommended=True,
+            documented_scope=goc.covers, scope_source=goc.scope_source,
             undated_events=undated, timeline_complete=False, data_gap_note=gap_note,
             disclosure=(
                 f"Documented goals of care ({goc.documented_date}) could not be confirmed as current: "
@@ -290,6 +319,25 @@ def evaluate_goc(
 
     # --- valid, and recent -> the one authorizing branch ---------------------
     if _is_supportive_only(summary):
+        # Scope mismatch (rule: "or doesn't cover this scenario"). A record whose
+        # recorded scope speaks only to, say, resuscitation cannot suppress
+        # disease-directed guidance. Unknown scope is NOT a mismatch — it falls
+        # through, because a bare "supportive care only" is a global statement.
+        if goc.covers and not (set(goc.covers) & DISEASE_DIRECTED_DOMAINS):
+            covered = ", ".join(d.value for d in goc.covers)
+            return GocEvaluation(
+                status=GocStatus.SCOPE_MISMATCH,
+                authorizes_skip=False,
+                documented_date=goc.documented_date, age_days=age_days,
+                reference_date=ref.isoformat() if ref else None,
+                summary=summary, revisit_recommended=True,
+                documented_scope=goc.covers, scope_source=goc.scope_source,
+                disclosure=(
+                    f"Documented goals of care ({goc.documented_date}) address {covered} and do not "
+                    "cover disease-directed treatment, so they were not used to withhold guidance. "
+                    "Goals of care should be revisited for this decision."
+                ),
+            )
         return GocEvaluation(
             status=GocStatus.VALID_SUPPORTIVE_ONLY,
             authorizes_skip=True,
@@ -297,6 +345,7 @@ def evaluate_goc(
             documented_date=goc.documented_date, age_days=age_days,
             reference_date=ref.isoformat() if ref else None,
             summary=summary, timeline_complete=True,
+            documented_scope=goc.covers, scope_source=goc.scope_source,
             disclosure=(
                 f"Disease-directed guidance and trial matching were NOT surfaced. Goals of care "
                 f"documented {goc.documented_date} ({age_days} days ago, with no major treatment event "
@@ -309,6 +358,7 @@ def evaluate_goc(
     return GocEvaluation(
         status=GocStatus.VALID_ESCALATION_CONSISTENT,
         authorizes_skip=False,
+        documented_scope=goc.covers, scope_source=goc.scope_source,
         documented_date=goc.documented_date, age_days=age_days,
         reference_date=ref.isoformat() if ref else None,
         summary=summary,

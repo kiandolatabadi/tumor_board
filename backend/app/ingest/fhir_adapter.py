@@ -17,9 +17,12 @@ from typing import Any, Optional
 from ..case_schema import (
     Biomarker,
     BiomarkerCategory,
+    CareDomain,
     Comorbidity,
     Diagnosis,
     GoalsOfCare,
+    ScopeSource,
+    derive_care_domains,
     ImagingReport,
     LabResult,
     Medication,
@@ -153,7 +156,14 @@ def _handle_observation(obs: dict, ref: str, case: TumorBoardCase) -> None:
     prov = _prov(obs, ref)
 
     if any(h in low for h in _GOC_HINTS):
-        case.goals_of_care = GoalsOfCare(documented_date=date, summary=val, status=None)
+        # Scope from the observation LABEL as well as its value: a "code status"
+        # observation is about resuscitation even when its value is just "DNR".
+        covers = derive_care_domains(label, val)
+        case.goals_of_care = GoalsOfCare(
+            documented_date=date, summary=val, status=None,
+            covers=covers,
+            scope_source=ScopeSource.derived_from_text if covers else ScopeSource.absent,
+        )
         return
     if any(h in low for h in _PERF_HINTS):
         scale = "ECOG" if "ecog" in low else "Karnofsky" if "karnofsky" in low else None
@@ -281,10 +291,22 @@ def from_record(record: dict) -> TumorBoardCase:
     # Explicit goals_of_care extension (if a source carries it outside FHIR).
     goc = pctx.get("goals_of_care") or record.get("goals_of_care")
     if isinstance(goc, dict):
+        # An explicitly coded scope wins; otherwise derive it from the prose.
+        coded = goc.get("covers") or goc.get("scope")
+        coded = [coded] if isinstance(coded, str) else coded
+        covers, source = [], ScopeSource.absent
+        if isinstance(coded, list):
+            covers = [CareDomain(c) for c in coded if c in CareDomain._value2member_map_]
+            source = ScopeSource.coded if covers else ScopeSource.absent
+        if not covers:
+            covers = derive_care_domains(goc.get("summary"), goc.get("status"))
+            source = ScopeSource.derived_from_text if covers else ScopeSource.absent
         case.goals_of_care = GoalsOfCare(
             documented_date=goc.get("last_documented") or goc.get("documented_date"),
             summary=goc.get("summary"),
             status=goc.get("status"),
+            covers=covers,
+            scope_source=source,
         )
 
     enc = record.get("encounter_fhir", {})

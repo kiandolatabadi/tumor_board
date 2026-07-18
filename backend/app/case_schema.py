@@ -19,6 +19,9 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+# Shared, dependency-free vocabulary (also re-exported by app/stage2/enums.py).
+from .care_domains import CareDomain, ScopeSource, derive_care_domains  # noqa: F401
+
 
 class Provenance(BaseModel):
     """Where a normalized value came from, so nothing is a black box."""
@@ -124,6 +127,12 @@ class GoalsOfCare(BaseModel):
     documented_date: Optional[str] = None
     summary: Optional[str] = None
     status: Optional[str] = None
+    covers: list[CareDomain] = Field(
+        default_factory=list,
+        description="Care domains this conversation actually addressed. Empty means the source "
+        "recorded no scope — NOT that the conversation covered nothing.",
+    )
+    scope_source: ScopeSource = ScopeSource.absent
 
 
 class Patient(BaseModel):

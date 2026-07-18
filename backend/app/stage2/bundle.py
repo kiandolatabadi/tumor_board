@@ -11,7 +11,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
-from .enums import BiomarkerCategory, MedIntent, PerfScale, StageGroup, TreatmentKind, TriState
+from .enums import (BiomarkerCategory, CareDomain, MedIntent, PerfScale, ScopeSource, StageGroup,
+                    TreatmentKind, TriState)
 
 BUNDLE_VERSION = "1.0.0"
 
@@ -120,6 +121,12 @@ class GoalsOfCare(BaseModel):
     documented_date: Optional[str] = None
     summary: Optional[str] = None
     status: Optional[str] = None
+    # Which care domains the conversation ADDRESSED. Mechanical: Stage 2 records
+    # what a document covers; whether that answers a given clinical question is
+    # Stage 3's join. `scope_source == absent` means UNKNOWN, not "covers nothing" —
+    # do not read an empty list as absence of coverage.
+    covers: list[CareDomain] = Field(default_factory=list)
+    scope_source: ScopeSource = ScopeSource.absent
     provenance: Provenance
 
 

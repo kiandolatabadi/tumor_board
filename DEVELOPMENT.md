@@ -153,6 +153,11 @@ contrary one.*
   `CONTRADICTED_BY_ROOM` never do. Missing goals of care is the least-informed state, not a licence
   to withhold options.
 
+- **Scope mismatch blocks suppression.** `GoalsOfCare.covers` (closed `CareDomain` vocabulary) plus
+  `scope_source` record what a conversation addressed. A record touching no disease-directed domain
+  yields `SCOPE_MISMATCH` — a resuscitation-only DNR cannot withhold trial matching. Unknown scope
+  (`scope_source == absent`) is NOT a mismatch and falls through. Stage 3 joins via
+  `goc.covers_domain()`, which returns `None` for unknown — unknown is not False.
 - **An undated event is unprovable recency, not absence.** `major_events()` keeps undated events; an
   undated event of an invalidating kind yields `TIMELINE_INCOMPLETE` (no skip) plus a `data_gap_note`
   naming them. Dropping them would fail silently in the dangerous direction.

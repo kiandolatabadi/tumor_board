@@ -40,7 +40,8 @@ from .bundle import (
     Staging,
     Staleness,
 )
-from .enums import BiomarkerCategory, MedIntent, PerfScale, StageGroup, TreatmentKind, TriState
+from .enums import (BiomarkerCategory, CareDomain, MedIntent, PerfScale, ScopeSource, StageGroup,
+                    TreatmentKind, TriState, derive_care_domains)
 from .ids import age_days, age_years, element_id, source_digest, stage_group, value_num
 
 # TREATMENT_KIND classification — closed enum, fixes the old kind="procedure" bug.
@@ -96,7 +97,12 @@ def _handle_observation(res: dict, bld: _Builder) -> bool:
     if any(h in low for h in _GOC_HINTS):
         if b.goals_of_care is None:
             eid = bld.eid("goals_of_care", label or "documented", resource=res)
-            b.goals_of_care = GoalsOfCare(element_id=eid, documented_date=dated, summary=val, provenance=bld.prov(eid, res))
+            covers = derive_care_domains(label, val)
+            b.goals_of_care = GoalsOfCare(
+                element_id=eid, documented_date=dated, summary=val,
+                covers=covers,
+                scope_source=ScopeSource.derived_from_text if covers else ScopeSource.absent,
+                provenance=bld.prov(eid, res))
         return True
     if any(h in low for h in _PERF_HINTS):
         eid = bld.eid("performance_status", label or "ecog", resource=res)
@@ -234,6 +240,21 @@ def _build_staleness(b: PatientCaseBundle) -> list[Staleness]:
     return out
 
 
+
+def _goc_covers(goc: dict) -> tuple[list[CareDomain], ScopeSource]:
+    """An explicitly coded scope wins; otherwise derive it from the prose. Returns
+    (covers, source) — `absent` means the source recorded no scope, which is
+    UNKNOWN, not 'covers nothing'."""
+    coded = goc.get("covers") or goc.get("scope")
+    coded = [coded] if isinstance(coded, str) else coded
+    if isinstance(coded, list):
+        vals = [CareDomain(c) for c in coded if c in CareDomain._value2member_map_]
+        if vals:
+            return vals, ScopeSource.coded
+    derived = derive_care_domains(goc.get("summary"), goc.get("status"))
+    return derived, ScopeSource.derived_from_text if derived else ScopeSource.absent
+
+
 def to_bundle(record: dict) -> PatientCaseBundle:
     meta = record.get("metadata", {})
     pctx = record.get("patient_context", {})
@@ -259,6 +280,7 @@ def to_bundle(record: dict) -> PatientCaseBundle:
             element_id=eid,
             documented_date=goc.get("last_documented") or goc.get("documented_date"),
             summary=goc.get("summary"), status=goc.get("status"),
+            covers=_goc_covers(goc)[0], scope_source=_goc_covers(goc)[1],
             provenance=Provenance(source="patient_context", resource_type="goals_of_care", ref=None, raw_ref=None),
         )
 

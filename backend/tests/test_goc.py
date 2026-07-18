@@ -8,8 +8,9 @@ must NOT authorize a skip. Absence of evidence is never a licence to act.
 from __future__ import annotations
 
 from app.agents.schema import Enrichment, InferenceKind, InferredObservation, SourceRef
-from app.case_schema import Diagnosis, GoalsOfCare, PriorTreatment, TumorBoardCase
-from app.goc import CareScope, GocStatus, evaluate_goc, major_events
+from app.case_schema import (CareDomain, Diagnosis, GoalsOfCare, PriorTreatment, ScopeSource,
+                             TumorBoardCase, derive_care_domains)
+from app.goc import CareScope, GocStatus, covers_domain, evaluate_goc, major_events
 
 
 def _case(goc: GoalsOfCare | None = None, treatments: list[PriorTreatment] | None = None,
@@ -253,3 +254,83 @@ def test_data_gap_is_surfaced_even_when_goc_is_absent():
     ev = evaluate_goc(case)
     assert ev.status is GocStatus.ABSENT
     assert ev.timeline_complete is False and ev.data_gap_note
+
+
+# --- GOC scope: "or doesn't cover this scenario" ------------------------------
+
+def test_resuscitation_only_record_cannot_suppress_disease_directed_guidance():
+    """The README's scope-mismatch case: a DNR conversation says nothing about
+    whether to pursue a trial, so it must not withhold guidance."""
+    case = _case(GoalsOfCare(
+        documented_date="2026-06-02",
+        summary="Code status discussed: DNR/DNI. Comfort-focused if arrest occurs.",
+        covers=[CareDomain.resuscitation],
+        scope_source=ScopeSource.derived_from_text,
+    ))
+    ev = evaluate_goc(case)
+    assert ev.status is GocStatus.SCOPE_MISMATCH
+    assert ev.authorizes_skip is False
+    assert "resuscitation" in ev.disclosure
+    assert ev.revisit_recommended is True
+
+
+def test_record_covering_a_disease_directed_domain_still_authorizes_skip():
+    case = _case(GoalsOfCare(
+        documented_date="2026-06-02",
+        summary="Declines further chemotherapy; comfort care only.",
+        covers=[CareDomain.systemic_therapy, CareDomain.symptom_management],
+        scope_source=ScopeSource.derived_from_text,
+    ))
+    ev = evaluate_goc(case)
+    assert ev.status is GocStatus.VALID_SUPPORTIVE_ONLY
+    assert ev.authorizes_skip is True
+
+
+def test_unknown_scope_falls_through_rather_than_blocking():
+    """Unrecorded scope is not a mismatch: a bare 'supportive care only' is a
+    global statement. Preserves behaviour for sources that carry no scope."""
+    case = _case(GoalsOfCare(documented_date="2026-06-02", summary="Comfort-focused care only."))
+    ev = evaluate_goc(case)
+    assert ev.scope_source is ScopeSource.absent
+    assert ev.authorizes_skip is True
+
+
+def test_scope_is_carried_on_every_branch_for_stage_3():
+    for goc in (
+        GoalsOfCare(documented_date="2026-06-02", summary="Pursue all options.",
+                    covers=[CareDomain.systemic_therapy], scope_source=ScopeSource.coded),
+        GoalsOfCare(documented_date="2025-02-01", summary="Comfort care only.",
+                    covers=[CareDomain.hospice_referral], scope_source=ScopeSource.coded),
+    ):
+        ev = evaluate_goc(_case(goc))
+        assert ev.documented_scope == goc.covers
+        assert ev.scope_source is ScopeSource.coded
+
+
+def test_covers_domain_distinguishes_unknown_from_false():
+    known = evaluate_goc(_case(GoalsOfCare(
+        documented_date="2026-06-02", summary="Declines further chemotherapy; comfort care only.",
+        covers=[CareDomain.systemic_therapy], scope_source=ScopeSource.coded)))
+    assert covers_domain(known, CareDomain.systemic_therapy) is True
+    assert covers_domain(known, CareDomain.surgery) is False
+
+    unknown = evaluate_goc(_case(GoalsOfCare(documented_date="2026-06-02", summary="Comfort care only.")))
+    assert covers_domain(unknown, CareDomain.surgery) is None  # unknown is not False
+
+
+def test_derive_care_domains_is_deterministic_and_mechanical():
+    assert derive_care_domains("Code status: DNR/DNI") == [CareDomain.resuscitation]
+    assert set(derive_care_domains("declines further chemotherapy, wants hospice")) == {
+        CareDomain.systemic_therapy, CareDomain.hospice_referral}
+    assert derive_care_domains(None, "") == []
+
+
+def test_negation_does_not_cross_a_clause_boundary():
+    """"Declines further chemotherapy" negates chemotherapy, not the comfort-care
+    statement in the next clause. Regression: the guard used to reach across ';'."""
+    case = _case(GoalsOfCare(documented_date="2026-06-02",
+                             summary="Declines further chemotherapy; comfort care only."))
+    assert evaluate_goc(case).authorizes_skip is True
+    # ...but a negation in the SAME clause still applies.
+    same = _case(GoalsOfCare(documented_date="2026-06-02", summary="Not ready for comfort care."))
+    assert evaluate_goc(same).authorizes_skip is False

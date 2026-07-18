@@ -1,4 +1,4 @@
-contract_version: 1.0.0
+contract_version: 1.1.0
 status: ACCEPTED  # two-person Stage 2 / Stage 3 split adopted 2026-07-18
 accepted_on: 2026-07-18
 generated_at: 2026-07-18
@@ -247,6 +247,20 @@ PatientCaseBundle:
         documented_date: {type: "string | null"}
         summary: {type: "string | null"}
         status: {type: "string | null"}
+        covers:
+          type: array
+          items: {type: CareDomain}
+          default: []
+          note: >
+            Care domains the documented conversation ADDRESSED. Mechanical: Stage 2
+            records what a document covers; whether a covered domain answers a given
+            clinical question is Stage 3's join. An EMPTY list with
+            scope_source=absent means UNKNOWN, not "covers nothing" — Stage 3 MUST
+            NOT read it as absence of coverage.
+        scope_source:
+          type: ScopeSource
+          default: absent
+          note: How `covers` was established.
         provenance: {type: Provenance}
 
     unmapped:
@@ -416,6 +430,7 @@ TranscriptBundle:
 
   fields:
     bundle_version: {type: string, required: true, value: "1.0.0"}
+    # 1.1.0 added goals_of_care.covers / .scope_source (additive, defaulted).
     transcript_id: {type: string, required: true}
     source_digest: {type: string, required: true, format: "sha256:<hex>"}
     turns:
@@ -647,3 +662,20 @@ forbidden_on_both_sides:
   - Either side adding an enum value without a contract version bump.
   - Either side depending on collection ORDER for meaning.
   - The model in Stage 3 writing any field under `operability`.
+
+# --- added in contract 1.1.0 --------------------------------------------------
+care_domain_vocabulary:
+  CareDomain:
+    - resuscitation
+    - life_sustaining_treatment
+    - systemic_therapy
+    - surgery
+    - radiation
+    - clinical_trials
+    - hospice_referral
+    - symptom_management
+  ScopeSource: [coded, derived_from_text, absent]
+  note: >
+    Closed vocabularies. Adding a value is a contract change. Stage 3 joins a
+    guidance rule's domain against goals_of_care.covers via
+    app.goc.covers_domain(), which returns None (not False) when scope is unknown.

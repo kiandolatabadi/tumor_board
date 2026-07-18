@@ -100,6 +100,7 @@
     }
   },
   "goals_of_care": {
+    "covers": [],
     "documented_date": "2024-09-14",
     "element_id": "goals_of_care/documented",
     "provenance": {
@@ -108,6 +109,7 @@
       "resource_type": "goals_of_care",
       "source": "patient_context"
     },
+    "scope_source": "absent",
     "status": "possibly_stale",
     "summary": "Preferred quality-of-life-focused care; declined aggressive measures at a prior (pre-cancer) discussion."
   },

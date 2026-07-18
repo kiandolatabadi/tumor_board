@@ -5,7 +5,7 @@
 > copied alongside it to **`docs/stage-interface-contract.yaml`**; the advisor's full
 > working artifacts stay local in `.boilerplate/` (gitignored) by design. One factual
 > correction was applied to §4.1 residual gap 1 — model-initiated operability results
-> *are* captured (`orchestrator.py:178`); the original claim was verified stale against
+> *are* captured (`orchestrator.py:251`); the original claim was verified stale against
 > current code. Marked inline.
 
 **Decision (2026-07-18): ADOPTED.** The two-person Stage 2 / Stage 3 split described here is the
@@ -15,8 +15,10 @@ authoritative seam. Ownership: **Stage 2 (patient data structuring + transcript)
 being migrated toward this shape; sections below mark what exists vs. what is still to build.
 
 **Status:** partially implemented. `README.md` remains the historical spec; this file is the delta
-against it. The enrichment pass (§5) is **built and tested** — 22/22 passing. The Stage 2 / Stage 3
-seam (§3) is **adopted but not yet implemented**. Each section marks its own state.
+against it. The enrichment pass (§5) is **built and tested** — full suite 63/63 passing. The
+Stage 2 / Stage 3 seam (§3) is **adopted; the Stage 2 side is scaffolded** (schema + adapter + golden
+fixture, 18 contract tests) while Stage 3's guidance-as-input is not started. Each section marks its
+own state.
 
 **Audience:** the two component owners. Read this before writing code against the other person's half.
 
@@ -61,7 +63,7 @@ transcript file ─────────────────────�
 | **1** | Live STT feed | — | **DESCOPED.** Static transcript file. Deferred, not cancelled. |
 | **2** | Patient data structuring — files/folder → `PatientCaseBundle` | James | **scaffolded** — `app/stage2/` schema + adapter, 18 contract tests, golden fixture at `fixtures/contract/v1/` |
 | **E** | Enrichment pre-pass — source-cited inferences that feed [3] | parallel session | **implemented** |
-| **P** | Goals-of-care precondition — gates whether guidance runs at all (§8) | — | **implemented, 16 tests** |
+| **P** | Goals-of-care precondition — gates whether guidance runs at all (§8) | — | **implemented, 23 tests** |
 | **3** | Guidance + gap assessment — deterministic join, then bounded model call | Partner | orchestrator exists; guidance-as-input not started |
 
 **Ordering note.** Enrichment is a **pre-pass** — not a parallel channel, and not a consolidator. It
@@ -98,8 +100,10 @@ The rule that keeps the seam clean, applicable by either owner without conferrin
 > The word "gap" must not appear in Stage 2's output.**
 
 Consequence: **`case_schema.completeness()` is deleted.** It hardcodes which absences count as gaps —
-a clinical judgment — inside the data schema. Its six checks are re-authored as `GEN-*` rules in the
-guidance pack. Stage 2 emits `presence` (mechanical); Stage 3 joins it against guidance.
+a clinical judgment — inside the data schema. Its five remaining checks are re-authored as `GEN-*`
+rules in the guidance pack (the sixth — goals of care — has already been removed: the precondition
+in `goc.py` is now its sole owner). Stage 2 emits `presence` (mechanical); Stage 3 joins it against
+guidance.
 
 Without this, the collision is guaranteed: Stage 3 writes "stage III NSCLC requires EGFR" and finds
 Stage 2 already emitting a hardcoded `biomarkers missing`, with no arbiter between them.
@@ -135,7 +139,7 @@ Two residual gaps, both narrow, both failing safe:
 
 1. **~~Clearance is reachable only via the enrichment path.~~ CORRECTED — resolved in current code.**
    The original assessment claimed `op_results` was seeded before the tool loop and never updated
-   inside it. Verified stale: `orchestrator.py:178` appends model-initiated `check_operability`
+   inside it. Verified stale: `orchestrator.py:251` appends model-initiated `check_operability`
    results to `op_results` inside the loop, so they accumulate across tool-use iterations and are
    present when the terminal-iteration gate runs. `cleared` is reachable via the model path.
    (With enrichment skipped and the model calling no operability tool, `op_results` is empty and
@@ -162,8 +166,8 @@ them.
 
 ## 5. The enrichment pass — IMPLEMENTED
 
-**Built and tested (22/22).** `backend/app/agents/`. This section describes what exists, not a
-proposal.
+**Built and tested** (`test_enrich.py` + `test_triggered_checks.py`, 10 tests; full suite 63/63).
+`backend/app/agents/`. This section describes what exists, not a proposal.
 
 **Intent:** capture nuance the deterministic path structurally cannot — performance status implied
 by casual speech, a comorbidity mentioned but never coded, a goals-of-care concern raised in
@@ -224,13 +228,17 @@ meaning; `raises_check` as a free string. All three confirmed in code, suite gre
 **Still live, silent, confirmed on disk** — all on the Stage 2 side:
 
 1. **`case_schema.py:117`** documents `PriorTreatment.kind` as `'surgery' | 'systemic' | 'radiation'`,
-   but **`fhir_adapter.py:233`** hardcodes `kind="procedure"`. A Stage 3 rule matching
+   but **`fhir_adapter.py:248`** hardcodes `kind="procedure"`. A Stage 3 rule matching
    `kind == "surgery"` matches nothing, forever, with no error. Close the enum, fix the adapter.
+   *Fixed on the Stage 2 side:* `stage2/adapter.py` classifies into the closed `TreatmentKind` enum
+   (`_treatment_kind`). The defect is now confined to the pre-split ingest adapter.
 2. **`fhir_adapter.py:131`** — `_prov()` falls back to a positional ref. Reorder the source and every
-   citation silently re-points. Mint stable `element_id`s.
-3. **`completeness()` is still called** from `orchestrator.py:132` and `main.py:60`. Per §3 it is to
-   be deleted and its six checks re-authored as `GEN-*` guidance rules. Until then, "what counts as a
-   gap" has two owners.
+   citation silently re-points. Mint stable `element_id`s. *Fixed on the Stage 2 side:*
+   `stage2/ids.py` mints stable `element_id`s; the pre-split adapter still has the fallback.
+3. **`completeness()` is still called** from `orchestrator.py:195` and `main.py:60`. Per §3 it is to
+   be deleted and its five remaining checks re-authored as `GEN-*` guidance rules (its goals-of-care
+   check is already gone — GOC staleness/absence now lives only in the precondition, and
+   `flag_stale_data` explicitly disclaims it too). Until then, "what counts as a gap" has two owners.
 
 Also: `max_tokens=4096` with a bare `json.loads` in `orchestrator.py` means truncated output yields
 zero findings rather than partial ones. (Enrichment already degrades gracefully; the orchestrator
@@ -241,7 +249,7 @@ does not.)
 | # | Question | Blocks |
 |---|---|---|
 | 1 | **Who owns the guidance pack?** Under this design it holds the system's entire clinical substance — 6–12 rules, grades, `applies_when`, `intervention_class`. Currently unassigned and unreviewed. | Stage 3 — their whole build is a join against it |
-| 2 | Should model-initiated `check_operability` results count toward clearance? (§4.1 — today only enrichment-triggered ones do, so `cleared` is near-unreachable) | Stage 3 |
+| 2 | ~~Should model-initiated `check_operability` results count toward clearance?~~ **RESOLVED in code:** they do — `orchestrator.py:251` appends them inside the tool loop, so they gate alongside enrichment-triggered ones (§4.1 correction). | — |
 | 3 | Should clearance bind to a specific procedure rather than the run? (§4.2) | Stage 3 |
 | 4 | ~~`.boilerplate/` is gitignored — how does the interface contract reach both owners?~~ **RESOLVED:** contract committed to `docs/stage-interface-contract.yaml`. | — |
 
@@ -250,7 +258,7 @@ clinical content is the part no amount of architecture makes correct.
 
 ## 8. The precondition layer — IMPLEMENTED (goals of care)
 
-**Built and tested.** `backend/app/goc.py`, `backend/tests/test_goc.py` (16 tests, suite 38/38).
+**Built and tested.** `backend/app/goc.py`, `backend/tests/test_goc.py` (23 tests, suite 63/63).
 Clinical rules reviewed by the clinician partner.
 
 ### It is a layer, not a one-off
@@ -293,7 +301,7 @@ event-valid record documenting supportive care. `ABSENT`, `STALE_BY_AGE`, `INVAL
 informed state, not a licence to withhold options — and silent withholding is invisible harm, since
 nobody can audit what was never shown.
 
-`GocStatus` has seven values; exactly one sets `authorizes_skip = True`.
+`GocStatus` has eight values; exactly one sets `authorizes_skip = True`.
 
 **3. An undated event is unprovable recency, not absence.** `major_events()` retains events that carry
 no usable date, and an undated event of an invalidating kind yields `TIMELINE_INCOMPLETE` — no skip,
@@ -357,10 +365,11 @@ Both belong in the golden fixture **before** either owner starts:
    undated ones. `PatientCaseBundle` must preserve dates *and* types — and must read every FHIR date
    spelling the source uses, per the `performedPeriod` finding above. Where a date genuinely does not
    exist, carry the event with a null date rather than dropping it, so the gap is reportable.
-2. **GOC scope, not just a date.** The README also asks for *scope mismatch* — a conversation about
-   chemotherapy does not cover a surgical question. Today `GoalsOfCare` carries
-   `documented_date | summary | status`, so only staleness is checkable. Scope-matching needs the
-   record to carry what it covered.
+2. ~~**GOC scope, not just a date.**~~ **DONE — contract 1.1.0.** `GoalsOfCare` now carries
+   `covers: list[CareDomain]` (8-value closed vocabulary) and `scope_source`
+   (`coded` | `derived_from_text` | `absent`), in both `case_schema` and the Stage 2 bundle. The
+   vocabulary lives in `app/care_domains.py` — dependency-free, so neither layer depends on the
+   other and there is exactly one definition.
 
 ### Handoff to Stage 3 — code changes to be made on the Stage 3 side
 
@@ -378,7 +387,13 @@ Stage 2 keeps what is mechanical: emitting dated events and their kinds.
 
 ### Still open
 
-- **GOC scope matching** is unimplemented pending the schema change above (requirement 2).
+- **Scope mismatch is enforced.** A record whose recorded scope touches no disease-directed domain
+  (`systemic_therapy | surgery | radiation | clinical_trials`) yields `SCOPE_MISMATCH` and cannot
+  suppress guidance — the README's "or doesn't cover this scenario" case. A resuscitation-only DNR
+  conversation no longer withholds trial matching. **Unknown scope is not a mismatch**: a bare
+  "supportive care only" is a global statement and still falls through.
+- **`covers_domain(ev, domain)` is the Stage 3 primitive** — returns `True`/`False`, or **`None` when
+  scope is unknown**. Unknown is not False; do not treat it as coverage either way.
 - The **research agent** (§7 discussion) sits downstream of this precondition: its auto-trigger on
   empty guidance must not fire when `authorizes_skip` is true, and its fallback condition must key on
   *disease-specific* rules, since `GEN-*` completeness rules match nearly every case.

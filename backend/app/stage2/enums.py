@@ -51,3 +51,9 @@ class StageGroup(str, Enum):
     III = "III"
     IV = "IV"
     unknown = "unknown"
+
+
+# Care-domain vocabulary lives in app/care_domains.py — a dependency-free module
+# both the Stage 2 contract and the pre-split schema import, so neither layer
+# depends on the other. Re-exported here so it reads as part of this contract.
+from ..care_domains import CareDomain, ScopeSource, derive_care_domains  # noqa: E402,F401
