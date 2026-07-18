@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 # Shared, dependency-free vocabulary (also re-exported by app/stage2/enums.py).
 from .care_domains import CareDomain, ScopeSource, derive_care_domains  # noqa: F401
+from .treatment_kinds import TreatmentKind, classify_treatment_kind  # noqa: F401
 
 
 class Provenance(BaseModel):
@@ -117,7 +118,10 @@ class ImagingReport(BaseModel):
 
 class PriorTreatment(BaseModel):
     name: str
-    kind: Optional[str] = Field(None, description="'surgery' | 'systemic' | 'radiation' | ...")
+    kind: Optional[TreatmentKind] = Field(
+        None,
+        description="Closed vocabulary — no free strings. Downstream rules match on these values.",
+    )
     date: Optional[str] = None
     response: Optional[str] = None
     provenance: Optional[Provenance] = None

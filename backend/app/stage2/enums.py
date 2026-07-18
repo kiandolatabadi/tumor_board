@@ -35,15 +35,6 @@ class PerfScale(str, Enum):
     Karnofsky = "Karnofsky"
 
 
-class TreatmentKind(str, Enum):
-    surgery = "surgery"
-    systemic = "systemic"
-    radiation = "radiation"
-    ablation = "ablation"
-    transplant = "transplant"
-    other = "other"
-
-
 class StageGroup(str, Enum):
     s0 = "0"
     I = "I"
@@ -57,3 +48,4 @@ class StageGroup(str, Enum):
 # both the Stage 2 contract and the pre-split schema import, so neither layer
 # depends on the other. Re-exported here so it reads as part of this contract.
 from ..care_domains import CareDomain, ScopeSource, derive_care_domains  # noqa: E402,F401
+from ..treatment_kinds import TreatmentKind, classify_treatment_kind  # noqa: E402,F401

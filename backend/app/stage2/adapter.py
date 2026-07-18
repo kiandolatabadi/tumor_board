@@ -41,25 +41,13 @@ from .bundle import (
     Staleness,
 )
 from .enums import (BiomarkerCategory, CareDomain, MedIntent, PerfScale, ScopeSource, StageGroup,
-                    TreatmentKind, TriState, derive_care_domains)
+                    TreatmentKind, TriState, classify_treatment_kind,
+                    derive_care_domains)
 from .ids import age_days, age_years, element_id, source_digest, stage_group, value_num
 
-# TREATMENT_KIND classification — closed enum, fixes the old kind="procedure" bug.
-_TREATMENT_KIND = (
-    (("resect", "ectomy", "surgery", "surgical"), TreatmentKind.surgery),
-    (("radiation", "radiotherapy", "brachytherapy"), TreatmentKind.radiation),
-    (("chemo", "systemic", "infusion", "immunotherapy"), TreatmentKind.systemic),
-    (("ablat",), TreatmentKind.ablation),
-    (("transplant",), TreatmentKind.transplant),
-)
-
-
-def _treatment_kind(label: str) -> TreatmentKind:
-    low = label.lower()
-    for keys, kind in _TREATMENT_KIND:
-        if any(k in low for k in keys):
-            return kind
-    return TreatmentKind.other
+# Treatment-kind classification lives in app/treatment_kinds.py so the Stage 2
+# contract and the pre-split adapter cannot drift apart.
+_treatment_kind = classify_treatment_kind
 
 
 def _as_str(x: Any) -> Optional[str]:

@@ -32,6 +32,7 @@ from pydantic import BaseModel, Field
 
 from .agents.schema import Enrichment, InferenceKind
 from .case_schema import CareDomain, ScopeSource, TumorBoardCase
+from .treatment_kinds import TreatmentKind
 
 # ---------------------------------------------------------------------------
 # BELONGS IN THE GUIDANCE PACK (clinical opinion, not mechanical fact).
@@ -40,9 +41,11 @@ from .case_schema import CareDomain, ScopeSource, TumorBoardCase
 # and how old is too old. They live here only until the pack exists.
 # ---------------------------------------------------------------------------
 MAX_GOC_AGE_DAYS = 180
-INVALIDATING_EVENT_KINDS = {
-    "surgery", "systemic", "radiation", "procedure", "progression", "diagnosis",
-}
+# MUST cover every TreatmentKind value plus the derived kinds. A kind missing
+# here silently stops invalidating goals of care — a safety regression in the
+# permissive direction — so test_goc.py asserts full coverage rather than trusting
+# this list to be maintained by hand.
+INVALIDATING_EVENT_KINDS = {k.value for k in TreatmentKind} | {"progression", "diagnosis"}
 # Which domains a record must speak to before it can suppress disease-directed
 # guidance. A resuscitation-only conversation ("DNR") says nothing about whether
 # to pursue a trial — the README's "doesn't cover this scenario" case.

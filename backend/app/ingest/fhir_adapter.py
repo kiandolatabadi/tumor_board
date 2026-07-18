@@ -22,6 +22,7 @@ from ..case_schema import (
     Diagnosis,
     GoalsOfCare,
     ScopeSource,
+    classify_treatment_kind,
     derive_care_domains,
     ImagingReport,
     LabResult,
@@ -252,10 +253,13 @@ def _fhir_date(resource: dict, *keys: str) -> str | None:
 
 
 def _handle_procedure(proc: dict, ref: str, case: TumorBoardCase) -> None:
+    name = _text(proc.get("code")) or "procedure"
     case.prior_treatments.append(
         PriorTreatment(
-            name=_text(proc.get("code")) or "procedure",
-            kind="procedure",
+            name=name,
+            # Classified, not hardcoded: the old kind="procedure" meant a rule
+            # matching kind == "surgery" matched nothing, forever, with no error.
+            kind=classify_treatment_kind(name),
             date=_fhir_date(proc, "performedDateTime", "performedPeriod", "occurrenceDateTime", "performedString"),
             provenance=_prov(proc, ref),
         )

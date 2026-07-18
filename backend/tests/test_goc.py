@@ -10,7 +10,9 @@ from __future__ import annotations
 from app.agents.schema import Enrichment, InferenceKind, InferredObservation, SourceRef
 from app.case_schema import (CareDomain, Diagnosis, GoalsOfCare, PriorTreatment, ScopeSource,
                              TumorBoardCase, derive_care_domains)
-from app.goc import CareScope, GocStatus, covers_domain, evaluate_goc, major_events
+from app.goc import (INVALIDATING_EVENT_KINDS, CareScope, GocStatus, covers_domain, evaluate_goc,
+                     major_events)
+from app.treatment_kinds import TreatmentKind, classify_treatment_kind
 
 
 def _case(goc: GoalsOfCare | None = None, treatments: list[PriorTreatment] | None = None,
@@ -334,3 +336,30 @@ def test_negation_does_not_cross_a_clause_boundary():
     # ...but a negation in the SAME clause still applies.
     same = _case(GoalsOfCare(documented_date="2026-06-02", summary="Not ready for comfort care."))
     assert evaluate_goc(same).authorizes_skip is False
+
+
+def test_every_treatment_kind_invalidates_goals_of_care():
+    """Drift guard. Closing PriorTreatment.kind into TreatmentKind removed the old
+    catch-all "procedure"; a kind missing from INVALIDATING_EVENT_KINDS would
+    silently stop invalidating a GOC record — a regression toward permissiveness."""
+    missing = {k.value for k in TreatmentKind} - INVALIDATING_EVENT_KINDS
+    assert not missing, f"TreatmentKind values not covered: {missing}"
+
+
+def test_an_unclassifiable_treatment_still_invalidates():
+    """A procedure whose name matches no keyword classifies as `other` — still a
+    real clinical event, so it must still invalidate."""
+    case = _case(
+        GoalsOfCare(documented_date="2026-06-02", summary="Comfort-focused care only."),
+        treatments=[PriorTreatment(name="unlisted intervention", kind=TreatmentKind.other, date="2026-06-20")],
+    )
+    ev = evaluate_goc(case)
+    assert ev.status is GocStatus.INVALIDATED_BY_EVENT
+    assert ev.authorizes_skip is False
+
+
+def test_procedures_classify_instead_of_defaulting():
+    assert classify_treatment_kind("Left upper lobectomy") is TreatmentKind.surgery
+    assert classify_treatment_kind("carboplatin infusion") is TreatmentKind.systemic
+    assert classify_treatment_kind("stereotactic radiotherapy") is TreatmentKind.radiation
+    assert classify_treatment_kind("mystery intervention") is TreatmentKind.other
