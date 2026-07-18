@@ -1,4 +1,3 @@
-[tumor-board-hackathon-plan.md](https://github.com/user-attachments/files/30155925/tumor-board-hackathon-plan.md)
 # Tumor Board Agent — Hackathon Master Plan
 **Abridge × Anthropic × Lightspeed, July 18, 2026 — Shack15, Ferry Building SF**
 
@@ -14,7 +13,7 @@ You have two candidates:
 ---
 
 
-| Criterion | Weight (Rd 1) 
+| Criterion | Weight (Rd 1) | A — Gap-Detection Assistant | B — Multi-agent panel |
 |---|---|---|---|
 | Impact | 20% | ✅ solves a pain point clinicians will actually accept | ⚠️ real adoption path is much harder — most oncologists will not accept a system that makes the call |
 | Execution | 30% | ✅ narrower scope = more likely to be complete and polished by 5pm | ⚠️ multi-agent debate systems are notoriously hard to make *look* finished in one day; easy to demo as flaky or scripted |
@@ -88,9 +87,10 @@ Each finding carries several separate signals, deliberately not collapsed into o
 
 **A second, separate output, generated once at the end of the meeting rather than live per-utterance:** the action-item ledger — `{action, owner, deadline, linked_finding}` — synthesized from who in the room actually said they'd do what. Keep this structurally distinct from the live findings feed in your code and in the UI; it's a different kind of artifact (a to-do list for humans) rather than another finding, and it's the honest, human-triggered answer to "does this system close the loop" (§1a, Tier 3) rather than the system executing anything itself.
 
-Timeline 
+Timeline
 
-
+| Time | Block | Detail |
+|---|---|---|
 | 10:30–12:30 | Hacking begins | Data + orchestrator skeleton. Get one tool call working end-to-end (mirrors §6) before touching UI. |
 | 12:30–1:00 | — | Buffer / lunch starts at 1:00 |
 | 1:00–2:00 | Lunch served | Eat away from the screen for 15 min if you can; you're judged live at 5, protect your energy. |
