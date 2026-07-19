@@ -143,7 +143,8 @@ def run(biomarkers: list[str], cancer_type: str, stage: str | None = None) -> di
         from agents.trials import search_trials
 
         patient = {"features": _features(cancer_type, biomarkers, stage)}
-        findings = [_to_finding(t) for t in search_trials(patient)]
+        # Deterministic binary-criteria pass (no free-text LLM call) for demo latency.
+        findings = [_to_finding(t) for t in search_trials(patient, use_llm=False)]
         return {"findings": findings, "source": "trials_agent"}
     except Exception as exc:  # noqa: BLE001 — the demo must survive any agent failure
         log.warning(

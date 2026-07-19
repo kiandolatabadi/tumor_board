@@ -181,10 +181,20 @@ def load_case_bundle(case_id: str) -> tuple[PatientCaseBundle, TranscriptBundle]
     return bundle_from_case(case)
 
 
+# Prose-heavy specialties worth an enrichment read. The table-heavy folders
+# (laboratory, medications, pathology panels) are already extracted deterministically,
+# so feeding them to the LLM is cost without nuance.
+_PROSE_FOLDERS = {"oncology", "radiology", "biometrics", "gynecology", "pneumology"}
+
+
 def _case_free_text(case: CaseDetail) -> dict[str, str]:
-    """The prose the enrichment layer reads — every document body, keyed by doc id.
+    """The prose the enrichment layer reads — the narrative documents, keyed by doc id.
     Stage 2 doesn't interpret these; enrichment grounds its inferences against them."""
-    return {f"{f.name}/{d.filename}": d.body for f in case.folders for d in f.documents}
+    return {
+        f"{f.name}/{d.filename}": d.body
+        for f in case.folders if f.name in _PROSE_FOLDERS
+        for d in f.documents
+    }
 
 
 def analysis_inputs_from_case(case_id: str) -> tuple[dict, dict]:

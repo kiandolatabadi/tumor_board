@@ -92,7 +92,9 @@ def run(
         from agents.guidelines import check_guideline_coverage
 
         patient = {"features": _features(cancer_type, stage, biomarkers, age, sex, therapy_class)}
-        findings = check_guideline_coverage(patient)
+        # Deterministic (no synthesis LLM call) for demo latency — findings, grades,
+        # and evidence still come from the shelf; the orchestrator synthesizes narrative.
+        findings = check_guideline_coverage(patient, use_llm=False)
         return {"findings": findings, "source": "guidelines_agent"}
     except Exception as exc:  # noqa: BLE001 — the demo must survive any agent failure
         log.warning(
