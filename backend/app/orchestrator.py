@@ -22,16 +22,17 @@ from .schema import ActionItem, AnalysisResult, Finding, OperabilityStatus
 SYSTEM = """You are the orchestrator for a tumor-board gap-detection assistant.
 You surface what the room did NOT address; you never make the clinical call.
 
-Given the patient chart and the board transcript, use the provided tools to check
-guideline coverage, trial eligibility, drug interactions, stale data, and operability.
-Every finding must cite a source you actually retrieved via a tool — no source, no finding.
+The sub-checks — guideline coverage, trial eligibility, drug interactions, stale
+data, and operability — have ALREADY been run for you in code. Their outputs are
+provided below under TOOL RESULTS. Synthesize the gap findings from those results,
+the patient case, and the board transcript. Every finding must cite a source from
+the provided data — no source, no finding.
 
 Rules:
-- Any option involving surgery or an invasive procedure REQUIRES a check_operability
-  call first. Never present a surgical option as ready without it.
 - Set proposes_procedure=true ONLY when a finding proposes performing a surgical or
   invasive procedure — not when it merely mentions one (e.g. a documentation gap
-  about "radiotherapy vs surgery" is not a procedure proposal).
+  about "radiotherapy vs surgery" is not a procedure proposal). Do not present a
+  surgical option as ready unless the provided operability result cleared it.
 - Keep recommendation_grade (evidence strength, e.g. "IIa/B") separate from
   match_confidence (your certainty this evidence fits THIS patient, 0-1).
 - The GOALS-OF-CARE PRECONDITION has already been evaluated in code; treat it as
@@ -41,7 +42,7 @@ Rules:
   for every recommendation, not a separate topic.
 - Link each finding to the transcript line/quote it relates to, or mark it an absence.
 
-When done calling tools, return ONLY a JSON object matching:
+Return ONLY a JSON object matching:
 {"findings": [Finding...], "action_ledger": [ActionItem...]}
 where Finding has: issue, evidence_ref, recommendation, recommendation_grade,
 match_confidence, rationale_status ("stated"|"not_stated"), patient_facing_note,
@@ -203,6 +204,108 @@ def run_triggered_checks(case: TumorBoardCase, enrichment: Enrichment | None) ->
     return triggered
 
 
+# --- deterministic tool sweep (Option 1: no multi-round tool loop) -----------
+_CANCER_KEYWORDS = (
+    ("breast", "breast"), ("nsclc", "lung"), ("lung", "lung"), ("colorectal", "colorectal"),
+    ("colon", "colorectal"), ("prostate", "prostate"), ("ovarian", "ovarian"),
+    ("melanoma", "melanoma"), ("pancrea", "pancreatic"),
+)
+
+
+def _cancer_type(case: TumorBoardCase):
+    dx = case.diagnosis
+    blob = " ".join(filter(None, [dx.primary_site, dx.histology])).lower() if dx else ""
+    for kw, ct in _CANCER_KEYWORDS:
+        if kw in blob:
+            return ct
+    return dx.primary_site if dx else None
+
+
+def _age_years(case: TumorBoardCase):
+    from datetime import date
+    try:
+        b = date.fromisoformat(case.patient.birth_date[:10])
+        ref = date.fromisoformat((case.board_date or b.isoformat())[:10])
+        return ref.year - b.year - ((ref.month, ref.day) < (b.month, b.day))
+    except (TypeError, ValueError):
+        return None
+
+
+def _ecog(case: TumorBoardCase):
+    if case.performance_status and case.performance_status.value:
+        m = re.search(r"\d", case.performance_status.value)
+        return int(m.group()) if m else None
+    return None
+
+
+# Drug -> therapy class. Scanned across current meds AND the transcript, so the
+# board's PLANNED therapy (which the model used to infer, e.g. planned ribociclib
+# gating fertility coverage) still reaches the guideline agent deterministically.
+_DRUG_CLASS = {
+    "ribociclib": "gonadotoxic", "palbociclib": "gonadotoxic", "abemaciclib": "gonadotoxic",
+    "cyclophosphamide": "gonadotoxic", "doxorubicin": "gonadotoxic", "capecitabine": "gonadotoxic",
+    "paclitaxel": "gonadotoxic", "docetaxel": "gonadotoxic", "carboplatin": "gonadotoxic",
+    "cisplatin": "gonadotoxic", "chemotherapy": "gonadotoxic",
+    "tamoxifen": "endocrine", "fulvestrant": "endocrine", "letrozole": "endocrine",
+    "anastrozole": "endocrine", "exemestane": "endocrine",
+}
+
+
+def _therapy_and_drugs(case: TumorBoardCase, transcript: list[dict]) -> tuple[list[str], list[str]]:
+    text = (" ".join(m.name.lower() for m in case.medications) + " "
+            + " ".join(str(t.get("text", "")).lower() for t in transcript))
+    classes, drugs = set(), set()
+    for drug, cls in _DRUG_CLASS.items():
+        if drug in text:
+            classes.add(cls)
+            drugs.add(drug)
+    return sorted(classes), sorted(drugs)
+
+
+def _sweep_tools(case: TumorBoardCase, transcript: list[dict]) -> dict:
+    """Run every sub-check in code, deriving inputs from the case (and a deterministic
+    scan of the transcript for planned therapy). Replaces the model orchestrating
+    tool calls across many rounds."""
+    dx = case.diagnosis
+    cancer = _cancer_type(case)
+    stage = dx.staging.overall_stage if dx and dx.staging else None
+    biomarkers = [b.gene or b.name for b in case.biomarkers]
+    therapy_class, planned_drugs = _therapy_and_drugs(case, transcript)
+    meds = [m.name for m in case.medications] + [d for d in planned_drugs if d not in {m.name.lower() for m in case.medications}]
+    comorbid = [c.name for c in case.comorbidities]
+    out: dict = {}
+
+    if cancer:
+        out["check_guideline_coverage"] = tools.dispatch("check_guideline_coverage", {
+            "cancer_type": cancer, "stage": stage, "biomarkers": biomarkers,
+            "age": _age_years(case), "sex": case.patient.sex, "therapy_class": therapy_class,
+        })
+        out["search_trials"] = tools.dispatch("search_trials", {
+            "biomarkers": biomarkers, "cancer_type": cancer, "stage": stage,
+        })
+    if meds:
+        seen, inter = set(), []
+        for m in meds:
+            for it in tools.dispatch("check_drug_interactions", {"proposed_drug": m, "current_meds": meds}).get("interactions", []):
+                key = tuple(sorted([str(it.get("drug_a", "")), str(it.get("drug_b", ""))]))
+                if key not in seen:
+                    seen.add(key)
+                    inter.append(it)
+        out["check_drug_interactions"] = {"interactions": inter, "current_meds": meds}
+
+    fields = [{"name": f"lab: {l.name}", "last_updated": l.date} for l in case.labs if l.date]
+    fields += [{"name": f"imaging: {i.modality or 'study'}", "last_updated": i.date} for i in case.imaging if i.date]
+    if fields and case.board_date:
+        out["flag_stale_data"] = tools.dispatch("flag_stale_data", {"fields": fields, "as_of": case.board_date})
+
+    if comorbid or _ecog(case) is not None:
+        out["check_operability"] = tools.dispatch("check_operability", {
+            "procedure": "proposed surgical/invasive procedure",
+            "ecog_status": _ecog(case), "comorbidities": comorbid,
+        })
+    return out
+
+
 def analyze(
     case: TumorBoardCase,
     transcript: list[dict],
@@ -222,10 +325,14 @@ def analyze(
     gaps = [m.model_dump() for m in case.completeness()]
     inferred = [o.model_dump() for o in enrichment.inferred] if enrichment else []
 
-    # Deterministically run any check an inference raised, BEFORE the model reasons.
+    # Deterministically run any check an inference raised, plus the full tool sweep.
     triggered = run_triggered_checks(case, enrichment)
-    # Operability results gate the findings; seed with the triggered ones.
+    tool_results = _sweep_tools(case, transcript)
+
+    # Operability results gate the findings: the inference-triggered ones + the sweep's.
     op_results = [t["result"] for t in triggered if t["tool"] == "check_operability"]
+    if "check_operability" in tool_results:
+        op_results.append(tool_results["check_operability"])
 
     user_content = (
         "NORMALIZED PATIENT CASE:\n"
@@ -235,64 +342,43 @@ def analyze(
         + "\n\nINFERRED CONTEXT (source-cited but UNCONFIRMED — treat as leads, "
         "verify against the transcript quote before acting):\n"
         + json.dumps(inferred, indent=2, default=str)
-        + "\n\nTRIGGERED CHECKS (AUTHORITATIVE — these tools already ran because an "
-        "inference raised them; respect their results):\n"
+        + "\n\nTRIGGERED CHECKS (raised by an inference):\n"
         + json.dumps(triggered, indent=2, default=str)
         + "\n\nGOALS-OF-CARE PRECONDITION (AUTHORITATIVE — already evaluated in code):\n"
         + json.dumps(goc.model_dump(), indent=2, default=str)
+        + "\n\nTOOL RESULTS (the sub-checks, already run in code):\n"
+        + json.dumps(tool_results, indent=2, default=str)
         + "\n\nBOARD TRANSCRIPT:\n"
         + json.dumps(transcript, indent=2)
     )
-    messages = [{"role": "user", "content": user_content}]
 
-    for _ in range(MAX_TOOL_TURNS):
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=MAX_OUTPUT_TOKENS,
-            system=SYSTEM,
-            tools=tools.TOOL_DEFS,
-            messages=messages,
+    # ONE synthesis call — no tool loop. Cache the (static) system prompt across runs.
+    resp = client.messages.create(
+        model=MODEL,
+        max_tokens=MAX_OUTPUT_TOKENS,
+        system=[{"type": "text", "text": SYSTEM, "cache_control": {"type": "ephemeral"}}],
+        messages=[{"role": "user", "content": user_content}],
+    )
+    try:
+        result = _parse(resp)
+    except OutputUnparseable as e:
+        # Loud, not silent: an empty findings panel is indistinguishable from
+        # "this case had no gaps", which is the worst failure here.
+        result = _unparseable_result(str(e), resp.stop_reason)
+    if resp.stop_reason == "max_tokens":
+        result.truncated = True
+    result.findings = gate_operability(result.findings, op_results)
+    result.enrichment = enrichment or Enrichment()
+    result.triggered_checks = triggered
+    result.goc = goc
+    if goc.revisit_recommended:
+        result.action_ledger.append(
+            ActionItem(
+                action=f"Revisit goals of care with the patient — {goc.disclosure}",
+                owner="NURSE_COORDINATOR",
+            )
         )
-        messages.append({"role": "assistant", "content": resp.content})
-
-        if resp.stop_reason != "tool_use":
-            try:
-                result = _parse(resp)
-            except OutputUnparseable as e:
-                # Loud, not silent: an empty findings panel is indistinguishable
-                # from "this case had no gaps", which is the worst failure here.
-                result = _unparseable_result(str(e), resp.stop_reason)
-            if resp.stop_reason == "max_tokens":
-                result.truncated = True
-            result.findings = gate_operability(result.findings, op_results)
-            result.enrichment = enrichment or Enrichment()
-            result.triggered_checks = triggered
-            result.goc = goc
-            if goc.revisit_recommended:
-                result.action_ledger.append(
-                    ActionItem(
-                        action=f"Revisit goals of care with the patient — {goc.disclosure}",
-                        owner="NURSE_COORDINATOR",
-                    )
-                )
-            return result
-
-        tool_results = []
-        for block in resp.content:
-            if block.type == "tool_use":
-                out = tools.dispatch(block.name, block.input)
-                if block.name == "check_operability":
-                    op_results.append(out)  # capture the model's own operability calls
-                tool_results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": block.id,
-                        "content": json.dumps(out),
-                    }
-                )
-        messages.append({"role": "user", "content": tool_results})
-
-    raise RuntimeError(f"Orchestrator exceeded {MAX_TOOL_TURNS} tool turns without finishing.")
+    return result
 
 
 class OutputUnparseable(Exception):
