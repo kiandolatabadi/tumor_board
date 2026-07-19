@@ -14,7 +14,7 @@ export default function App() {
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<CaseDetail | null>(null);
   const [view, setView] = useState<View>("chart");
-  const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [results, setResults] = useState<Record<string, AnalysisResult>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -40,7 +40,8 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      setResult(await runAnalysis(selected));
+      const r = await runAnalysis(selected);
+      setResults((prev) => ({ ...prev, [selected]: r }));  // remembered per patient
       setView("analysis");
     } catch (e) {
       setError(String(e));
@@ -48,6 +49,9 @@ export default function App() {
       setLoading(false);
     }
   }
+
+  // Analysis is viewed per patient — show the selected patient's result (or none yet).
+  const result = selected ? results[selected] : undefined;
 
   return (
     <div className="app">
