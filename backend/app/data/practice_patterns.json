@@ -1,8 +1,0 @@
-[
-  {
-    "option_a": "radiotherapy",
-    "option_b": "surgery",
-    "history": "This board selected radiotherapy over surgery in 7 of the last 9 similar stage III cases.",
-    "note": "AUDIT SIGNAL ONLY. Worth confirming this reflects patient-specific factors rather than default habit — never pressure to conform. [FACTICE demo table]"
-  }
-]

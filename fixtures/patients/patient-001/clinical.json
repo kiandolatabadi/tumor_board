@@ -1,9 +1,0 @@
-{
-  "resourceType": "Bundle",
-  "entry": [
-    {"resource": {"resourceType": "Condition", "id": "c1", "code": "Non-small cell lung cancer, adenocarcinoma", "stage": "IIIA (T3 N1 M0)", "onsetDateTime": "2026-06-30", "subject": {"reference": "Patient/pt-001"}}},
-    {"resource": {"resourceType": "Observation", "id": "o1", "code": "EGFR mutation analysis", "value": "exon 19 deletion, POSITIVE", "effectiveDateTime": "2026-07-05", "subject": {"reference": "Patient/pt-001"}}},
-    {"resource": {"resourceType": "Observation", "id": "o2", "code": "ECOG performance status", "value": "1", "subject": {"reference": "Patient/pt-001"}}},
-    {"resource": {"resourceType": "MedicationRequest", "id": "m1", "medication": "warfarin", "intent": "order", "subject": {"reference": "Patient/pt-001"}}}
-  ]
-}

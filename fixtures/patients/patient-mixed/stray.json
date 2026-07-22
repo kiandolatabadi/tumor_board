@@ -1,6 +1,0 @@
-{
-  "resourceType": "Condition",
-  "id": "x1",
-  "code": "Melanoma",
-  "subject": {"reference": "Patient/pt-999"}
-}

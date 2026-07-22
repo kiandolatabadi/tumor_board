@@ -1,7 +1,0 @@
-# Trials agent dependencies.
-# Only the agent step (judging non-obvious criteria against the chart) needs the
-# SDK; binary-criteria matching and the offline path run on the standard library.
-anthropic>=0.69
-
-# Dev / test (optional — tests also run via tests/run_all.py with no deps):
-pytest>=8

@@ -1,8 +1,0 @@
-{
-  "resourceType": "Bundle",
-  "entry": [
-    {"resource": {"resourceType": "Condition", "id": "c1", "code": "Invasive ductal breast carcinoma", "onsetDateTime": "2026-05-01", "subject": {"reference": "Patient/pt-002"}}},
-    {"resource": {"resourceType": "Observation", "id": "o1", "code": "HER2 IHC", "value": "3+ (positive)", "subject": {"reference": "Patient/pt-002"}}},
-    {"resource": {"resourceType": "MedicationRequest", "id": "m1", "medication": "tamoxifen", "intent": "order", "subject": {"reference": "Patient/pt-002"}}}
-  ]
-}

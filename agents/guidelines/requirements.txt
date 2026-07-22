@@ -1,7 +1,0 @@
-# Guidelines agent dependencies.
-# Only the synthesis Claude call needs the SDK; the rest of the pipeline (triage,
-# loader, matcher, specialists, offline synthesis) runs on the standard library.
-anthropic>=0.69
-
-# Dev / test (optional — tests also run via tests/run_all.py with no deps):
-pytest>=8

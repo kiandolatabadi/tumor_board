@@ -1,2 +1,0 @@
-ONCOLOGIST: Let's discuss patient 001, stage IIIA NSCLC adenocarcinoma.
-PATHOLOGIST: EGFR exon 19 deletion positive.
