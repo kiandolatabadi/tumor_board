@@ -1,10 +1,11 @@
-// Mirrors backend/app/schema.py. Keep the two in sync.
+// Mirrors backend/app/panel/schema.py. Keep the two in sync.
+
+// --- Panel analysis output --------------------------------------------------
 
 export interface TranscriptRef {
-  line: number | null;
-  timestamp: string | null;
   speaker: string | null;
   quote: string | null;
+  absent: boolean; // true when the finding is an ABSENCE — the room never raised it
 }
 
 export type RationaleStatus = "stated" | "not_stated";
@@ -12,14 +13,14 @@ export type OperabilityStatus = "not_applicable" | "cleared" | "not_confirmed";
 
 export interface Finding {
   issue: string;
-  evidence_ref: string;
   recommendation: string;
   recommendation_grade: string | null;
-  match_confidence: number; // 0..1 — the agent's certainty it fits THIS patient
+  match_confidence: number; // 0..1 — the panel's certainty it fits THIS patient
+  evidence_ref: string;
   rationale_status: RationaleStatus;
   patient_facing_note: string;
   live_question: string;
-  source_agent: string;
+  source_specialist: string;
   proposes_procedure: boolean;
   operability_status: OperabilityStatus;
   transcript_ref: TranscriptRef | null;
@@ -32,68 +33,51 @@ export interface ActionItem {
   linked_finding: string | null;
 }
 
-export interface SourceRef {
-  location: string;
-  line: number | null;
-  speaker: string | null;
-  quote: string;
-  grounded: boolean;
-  grounding_note: string | null;
+export type ClaimStance = "recommend" | "caution" | "oppose" | "defer";
+
+export interface Claim {
+  about: string;
+  stance: ClaimStance;
+  statement: string;
 }
 
-export interface InferredObservation {
-  kind: string;
+export interface SpecialistOpinion {
+  specialist: string;
+  title: string;
   summary: string;
-  value: string | null;
+  findings: Finding[];
+  claims: Claim[];
+  needs: string[];
   confidence: number;
-  rationale: string;
-  raises_check: string | null;
-  source: SourceRef;
-  inferred: true;
 }
 
-export interface Enrichment {
-  inferred: InferredObservation[];
-  rejected: InferredObservation[];
-  model: string | null;
-  skipped_reason: string | null;
+export interface Conflict {
+  kind: "contradiction" | "dependency";
+  topic: string;
+  description: string;
+  specialists: string[];
+  resolved: boolean;
+  resolution: string | null;
 }
 
-export interface TriggeredCheck {
-  raised_by: string;
-  tool: string;
-  input: Record<string, unknown>;
-  result: Record<string, unknown>;
+export interface DeliberationEntry {
+  round: number;
+  topic: string;
+  prompt_to: string;
+  opposing_claim: string;
+  response: string;
 }
 
-export interface AnalysisResult {
+export interface PanelResult {
+  case_id: string;
+  specialists_consulted: string[];
   findings: Finding[];
   action_ledger: ActionItem[];
-  enrichment: Enrichment;
-  // Tools an inference triggered (raises_check) with results — these gate findings.
-  triggered_checks: TriggeredCheck[];
-  truncated?: boolean;
-}
-
-export interface TranscriptLine {
-  line: number;
-  timestamp: string | null;
-  speaker: string | null;
-  text: string;
-}
-
-export interface MissingField {
-  field: string;
-  reason: string;
-}
-
-// Normalized case is intentionally loose on the frontend — it mirrors
-// backend TumorBoardCase but we only strongly type what the UI reads.
-export interface CaseResponse {
-  record: Record<string, unknown>;
-  case: Record<string, unknown>;
-  completeness: MissingField[];
-  transcript: TranscriptLine[];
+  conflicts: Conflict[];
+  deliberation: DeliberationEntry[];
+  rounds: number;
+  opinions: SpecialistOpinion[];
+  truncated: boolean;
 }
 
 // --- Patient data browser (data/cases/<case_id>/<specialty>/*.md) -------------

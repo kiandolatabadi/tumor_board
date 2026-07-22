@@ -18,6 +18,12 @@ MAX_TOOL_TURNS = int(os.getenv("TUMOR_BOARD_MAX_TURNS", "12"))
 MAX_OUTPUT_TOKENS = int(os.getenv("TUMOR_BOARD_MAX_OUTPUT_TOKENS", "16000"))
 
 
+# The SDK default is a 10-MINUTE per-request timeout with 2 retries — so one slow
+# call can hang for ~30 min. Cap it hard: a bounded timeout and a single retry.
+ANTHROPIC_TIMEOUT = float(os.getenv("ANTHROPIC_TIMEOUT", "120"))
+ANTHROPIC_MAX_RETRIES = int(os.getenv("ANTHROPIC_MAX_RETRIES", "1"))
+
+
 @lru_cache
 def get_client():
     """Lazily build the Anthropic client so imports don't require a key."""
@@ -29,4 +35,8 @@ def get_client():
             "ANTHROPIC_API_KEY is not set. Copy backend/.env.example to "
             "backend/.env and add your key."
         )
-    return Anthropic(api_key=key)
+    return Anthropic(
+        api_key=key,
+        timeout=ANTHROPIC_TIMEOUT,
+        max_retries=ANTHROPIC_MAX_RETRIES,
+    )

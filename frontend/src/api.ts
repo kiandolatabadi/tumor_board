@@ -1,25 +1,26 @@
-import type { AnalysisResult, CaseDetail, CaseResponse, CaseSummary } from "./types";
+import type { CaseDetail, CaseSummary, PanelResult } from "./types";
 
-// Vite proxies /api -> http://localhost:8000 (see vite.config.ts).
-const BASE = "/api";
+// In dev, Vite proxies /api -> http://localhost:8000 (see vite.config.ts).
+// In a deployed build there is no proxy, so point at the hosted backend with
+// VITE_API_BASE (e.g. https://your-app.onrender.com). Falls back to the proxy.
+const BASE = import.meta.env.VITE_API_BASE ?? "/api";
 
-export async function fetchCase(): Promise<CaseResponse> {
-  const res = await fetch(`${BASE}/case`);
-  if (!res.ok) throw new Error(`GET /case failed: ${res.status}`);
-  return res.json();
-}
-
-export async function runAnalysis(caseId: string): Promise<AnalysisResult> {
-  const res = await fetch(`${BASE}/analyze`, {
+/** Convene the specialist panel over a case and return the board output. */
+export async function runBoard(caseId: string): Promise<PanelResult> {
+  const res = await fetch(`${BASE}/board`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ case_id: caseId }), // analyze the selected data/cases patient
+    body: JSON.stringify({ case_id: caseId }),
   });
   if (!res.ok) {
-    // surface the backend's reason (e.g. missing API key) instead of just the code
+    // Surface the backend's reason (e.g. missing API key) instead of just the code.
     let detail = "";
-    try { detail = (await res.json()).detail || ""; } catch { /* noop */ }
-    throw new Error(`POST /analyze failed: ${res.status}${detail ? ` — ${detail}` : ""}`);
+    try {
+      detail = (await res.json()).detail || "";
+    } catch {
+      /* noop */
+    }
+    throw new Error(`POST /board failed: ${res.status}${detail ? ` — ${detail}` : ""}`);
   }
   return res.json();
 }

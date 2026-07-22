@@ -102,3 +102,7 @@ CLAUDE.md
 data/abridge/synthetic-ambient-fhir-25/index.html
 data/abridge/**/*.zip
 .boilerplate/
+
+# TypeScript emit from `tsc -b` on vite.config.ts (generated, not source)
+frontend/vite.config.js
+frontend/vite.config.d.ts

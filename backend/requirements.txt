@@ -1,0 +1,7 @@
+# Backend runtime deps for hosts that install with pip (Render/Railway/etc.).
+# Kept in sync with pyproject.toml [project].dependencies.
+anthropic>=0.117.0
+fastapi>=0.139.2
+uvicorn[standard]>=0.51.0
+pydantic>=2.13.4
+python-dotenv>=1.2.2
